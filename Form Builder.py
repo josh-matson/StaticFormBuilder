@@ -31,6 +31,12 @@ THEMES = {
         "form_bg": "#ffffff",
         "form_border": "1px solid #e0e0e0",
         "extra_css": "",
+        # tkinter preview colors
+        "preview": {
+            "bg": "#ffffff", "form_bg": "#ffffff", "border": "#e0e0e0",
+            "label": "#333333", "input_bg": "#ffffff", "input_bd": "#cccccc",
+            "btn_bg": "#0066cc", "btn_fg": "#ffffff", "radius": 2,
+        }
     },
     "Modern / Rounded": {
         "font_family": "'Inter', 'SF Pro Display', sans-serif",
@@ -55,6 +61,11 @@ THEMES = {
         border-color: #667eea;
         box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
     }""",
+        "preview": {
+            "bg": "#f0f4f8", "form_bg": "#ffffff", "border": "#e2e8f0",
+            "label": "#1a202c", "input_bg": "#ffffff", "input_bd": "#e2e8f0",
+            "btn_bg": "#667eea", "btn_fg": "#ffffff", "radius": 10,
+        }
     },
     "Classic / Formal": {
         "font_family": "'Georgia', 'Times New Roman', serif",
@@ -78,6 +89,11 @@ THEMES = {
         border-width: 2px;
     }
     h2 { font-style: italic; letter-spacing: 0.05em; }""",
+        "preview": {
+            "bg": "#faf8f5", "form_bg": "#fffef9", "border": "#c4b99a",
+            "label": "#2c2c2c", "input_bg": "#fffef9", "input_bd": "#c4b99a",
+            "btn_bg": "#8b4513", "btn_fg": "#ffffff", "radius": 0,
+        }
     },
 }
 
@@ -94,6 +110,9 @@ ELEMENT_TYPES = [
     ("Submit Button", "submit"),
 ]
 
+# Elements that need option values
+NEEDS_OPTIONS = {"radio", "select", "checkbox"}
+
 ELEMENT_ICONS = {
     "text": "Aa",
     "textarea": "¶",
@@ -104,6 +123,266 @@ ELEMENT_ICONS = {
     "file": "📎",
     "submit": "➤",
 }
+
+
+# ─── Theme Picker Dialog ───────────────────────────────────────────────────────
+
+class ThemePickerDialog(tk.Toplevel):
+    """A dialog that shows visual previews of each theme for selection."""
+
+    def __init__(self, parent, current_theme):
+        super().__init__(parent)
+        self.title("Choose a Theme")
+        self.configure(bg="#1e1e2e")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        tk.Label(
+            self, text="SELECT A THEME", fg="#a6adc8", bg="#1e1e2e",
+            font=("Segoe UI", 10, "bold")
+        ).pack(pady=(16, 12))
+
+        cards_frame = tk.Frame(self, bg="#1e1e2e")
+        cards_frame.pack(padx=16, pady=(0, 16))
+
+        for i, (name, theme) in enumerate(THEMES.items()):
+            is_active = (name == current_theme)
+            self._build_theme_card(cards_frame, name, theme["preview"], i, is_active)
+
+        # Cancel button
+        tk.Button(
+            self, text="Cancel", fg="#a6adc8", bg="#2a2a3d",
+            activebackground="#363655", font=("Segoe UI", 9),
+            relief=tk.FLAT, padx=16, pady=4, cursor="hand2",
+            command=self.destroy
+        ).pack(pady=(0, 12))
+
+        # Center on parent
+        self.update_idletasks()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+
+    def _build_theme_card(self, parent, name, p, col, is_active):
+        highlight = "#cba6f7" if is_active else "#45475a"
+
+        outer = tk.Frame(parent, bg=highlight, padx=2, pady=2)
+        outer.grid(row=0, column=col, padx=8, pady=4)
+
+        card = tk.Frame(outer, bg="#2a2a3d", width=190, height=230)
+        card.grid_propagate(False)
+        card.pack_propagate(False)
+        card.pack()
+
+        # Theme name
+        name_lbl = tk.Label(
+            card, text=name, fg="#cdd6f4", bg="#2a2a3d",
+            font=("Segoe UI", 9, "bold")
+        )
+        name_lbl.pack(pady=(8, 6))
+
+        # Mini form preview drawn on a canvas
+        canvas = tk.Canvas(card, width=170, height=150, bg=p["bg"],
+                           highlightthickness=1, highlightbackground=p["border"])
+        canvas.pack(padx=10, pady=(0, 4))
+
+        # Draw a mini form preview
+        self._draw_form_preview(canvas, p)
+
+        # "Selected" or "Select" label
+        if is_active:
+            btn_lbl = tk.Label(
+                card, text="✓ Selected", fg="#a6e3a1", bg="#2a2a3d",
+                font=("Segoe UI", 9, "bold")
+            )
+        else:
+            btn_lbl = tk.Label(
+                card, text="Select", fg="#89b4fa", bg="#2a2a3d",
+                font=("Segoe UI", 9), cursor="hand2"
+            )
+
+        btn_lbl.pack(pady=(2, 6))
+
+        # Click handler on entire card
+        def select(e=None):
+            self.result = name
+            self.destroy()
+
+        if not is_active:
+            for widget in (outer, card, name_lbl, canvas, btn_lbl):
+                widget.bind("<Button-1>", select)
+                if widget != canvas:
+                    widget.configure(cursor="hand2")
+
+    def _draw_form_preview(self, canvas, p):
+        """Draw a miniature form representation on the canvas."""
+        cx, cy = 10, 10
+        w = 150
+
+        # Form container background
+        r = min(p["radius"], 6)
+        self._draw_rounded_rect(canvas, 5, 5, 165, 145, r, p["form_bg"], p["border"])
+
+        # "Label" text
+        canvas.create_text(cx + 4, cy + 4, text="Full Name", anchor="nw",
+                           font=("Segoe UI", 7, "bold"), fill=p["label"])
+
+        # Input field
+        iy = cy + 18
+        ir = min(p["radius"], 4)
+        self._draw_rounded_rect(canvas, cx + 2, iy, cx + w - 2, iy + 18,
+                                ir, p["input_bg"], p["input_bd"])
+
+        # Second label
+        canvas.create_text(cx + 4, iy + 26, text="Email Address", anchor="nw",
+                           font=("Segoe UI", 7, "bold"), fill=p["label"])
+
+        # Second input
+        iy2 = iy + 40
+        self._draw_rounded_rect(canvas, cx + 2, iy2, cx + w - 2, iy2 + 18,
+                                ir, p["input_bg"], p["input_bd"])
+
+        # Third label
+        canvas.create_text(cx + 4, iy2 + 26, text="Message", anchor="nw",
+                           font=("Segoe UI", 7, "bold"), fill=p["label"])
+
+        # Textarea (taller)
+        iy3 = iy2 + 40
+        self._draw_rounded_rect(canvas, cx + 2, iy3, cx + w - 2, iy3 + 14,
+                                ir, p["input_bg"], p["input_bd"])
+
+        # Submit button
+        by = iy3 + 20
+        br = min(p["radius"], 4)
+        self._draw_rounded_rect(canvas, cx + 2, by, cx + 56, by + 16,
+                                br, p["btn_bg"], p["btn_bg"])
+        canvas.create_text(cx + 29, by + 8, text="Submit",
+                           font=("Segoe UI", 6, "bold"), fill=p["btn_fg"])
+
+    def _draw_rounded_rect(self, canvas, x1, y1, x2, y2, r, fill, outline):
+        """Draw a rounded rectangle on a canvas."""
+        if r <= 1:
+            canvas.create_rectangle(x1, y1, x2, y2, fill=fill, outline=outline, width=1)
+            return
+        points = [
+            x1 + r, y1,
+            x2 - r, y1,
+            x2, y1,
+            x2, y1 + r,
+            x2, y2 - r,
+            x2, y2,
+            x2 - r, y2,
+            x1 + r, y2,
+            x1, y2,
+            x1, y2 - r,
+            x1, y1 + r,
+            x1, y1,
+            x1 + r, y1,
+        ]
+        canvas.create_polygon(points, fill=fill, outline=outline, smooth=True, width=1)
+
+
+# ─── Options Dialog ─────────────────────────────────────────────────────────────
+
+class OptionsDialog(tk.Toplevel):
+    """Dialog for entering option values for radios, selects, and checkboxes."""
+
+    def __init__(self, parent, element_type, label):
+        super().__init__(parent)
+        self.title(f"Options for: {label}")
+        self.configure(bg="#1e1e2e")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        type_names = {"radio": "radio button", "select": "dropdown", "checkbox": "checkbox group"}
+        type_name = type_names.get(element_type, element_type)
+
+        tk.Label(
+            self, text=f"Enter options for this {type_name}:",
+            fg="#cdd6f4", bg="#1e1e2e", font=("Segoe UI", 10)
+        ).pack(padx=20, pady=(16, 4))
+
+        tk.Label(
+            self, text="One option per line",
+            fg="#6c7086", bg="#1e1e2e", font=("Segoe UI", 8)
+        ).pack(padx=20, pady=(0, 8))
+
+        # Text area for options
+        text_frame = tk.Frame(self, bg="#2a2a3d", padx=2, pady=2)
+        text_frame.pack(padx=20, pady=(0, 12), fill=tk.BOTH)
+
+        self.text = tk.Text(
+            text_frame, width=35, height=8,
+            bg="#2a2a3d", fg="#cdd6f4", insertbackground="#cdd6f4",
+            font=("Segoe UI", 10), relief=tk.FLAT, wrap=tk.WORD,
+            selectbackground="#45475a"
+        )
+        self.text.pack(padx=4, pady=4)
+
+        # Pre-fill with example
+        if element_type == "radio":
+            self.text.insert("1.0", "Option A\nOption B\nOption C")
+        elif element_type == "select":
+            self.text.insert("1.0", "Option 1\nOption 2\nOption 3")
+        elif element_type == "checkbox":
+            self.text.insert("1.0", "Choice 1\nChoice 2\nChoice 3")
+
+        self.text.tag_add("sel", "1.0", "end")
+        self.text.focus_set()
+
+        # Buttons
+        btn_frame = tk.Frame(self, bg="#1e1e2e")
+        btn_frame.pack(pady=(0, 16))
+
+        tk.Button(
+            btn_frame, text="✓ Confirm", fg="#1e1e2e", bg="#a6e3a1",
+            activebackground="#94d990", font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT, padx=16, pady=4, cursor="hand2",
+            command=self._confirm
+        ).pack(side=tk.LEFT, padx=4)
+
+        tk.Button(
+            btn_frame, text="Cancel", fg="#a6adc8", bg="#45475a",
+            activebackground="#585b70", font=("Segoe UI", 10),
+            relief=tk.FLAT, padx=16, pady=4, cursor="hand2",
+            command=self._cancel
+        ).pack(side=tk.LEFT, padx=4)
+
+        # Center on parent
+        self.update_idletasks()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        self.geometry(f"+{px + (pw - w) // 2}+{py + (ph - h) // 2}")
+
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.wait_window()
+
+    def _confirm(self):
+        raw = self.text.get("1.0", tk.END).strip()
+        options = [line.strip() for line in raw.split("\n") if line.strip()]
+        if not options:
+            messagebox.showwarning("No Options", "Please enter at least one option.", parent=self)
+            return
+        self.result = options
+        self.destroy()
+
+    def _cancel(self):
+        self.result = None
+        self.destroy()
 
 
 # ─── Main Application ──────────────────────────────────────────────────────────
@@ -118,11 +397,13 @@ class FormBuilder(tk.Tk):
 
         self.form_elements = []  # list of dicts
         self.columns = 1
-        self.selected_theme = tk.StringVar(value="Clean / Minimal")
+        self.selected_theme = "Clean / Minimal"
         self.selected_index = None  # currently selected element index
         self.drag_data = {"type": None, "widget": None}
+        self.current_save_path = None  # track current project file
 
         self._build_ui()
+        self._bind_keyboard_shortcuts()
 
     # ── UI Construction ─────────────────────────────────────────────────────
 
@@ -141,6 +422,12 @@ class FormBuilder(tk.Tk):
 
         # Center: canvas / form preview
         self._build_canvas(main)
+
+    def _bind_keyboard_shortcuts(self):
+        self.bind("<Control-s>", lambda e: self._save_project())
+        self.bind("<Control-S>", lambda e: self._save_project_as())
+        self.bind("<Control-o>", lambda e: self._load_project())
+        self.bind("<Control-e>", lambda e: self._export_html())
 
     def _build_toolbar(self):
         toolbar = tk.Frame(self, bg="#2a2a3d", height=50)
@@ -169,21 +456,23 @@ class FormBuilder(tk.Tk):
         )
         self.col_label.pack(side=tk.LEFT)
 
-        # Theme selector
+        # Theme button (opens visual picker)
         tk.Label(
             toolbar, text="  Theme:", fg="#a6adc8",
             bg="#2a2a3d", font=("Segoe UI", 10)
         ).pack(side=tk.LEFT, padx=(16, 4))
 
-        theme_menu = ttk.Combobox(
-            toolbar, textvariable=self.selected_theme,
-            values=list(THEMES.keys()), state="readonly", width=18
+        self.theme_btn = tk.Button(
+            toolbar, text="Clean / Minimal  ▾", fg="#cdd6f4", bg="#45475a",
+            activebackground="#585b70", font=("Segoe UI", 10),
+            relief=tk.FLAT, padx=10, pady=2, cursor="hand2",
+            command=self._open_theme_picker
         )
-        theme_menu.pack(side=tk.LEFT, padx=4)
+        self.theme_btn.pack(side=tk.LEFT, padx=4)
 
-        # Right side buttons
+        # Right side buttons (packed right-to-left)
         export_btn = tk.Button(
-            toolbar, text="💾 Export HTML", fg="#1e1e2e", bg="#a6e3a1",
+            toolbar, text="📤 Export HTML", fg="#1e1e2e", bg="#a6e3a1",
             activebackground="#94d990", font=("Segoe UI", 10, "bold"),
             relief=tk.FLAT, padx=14, pady=4, cursor="hand2",
             command=self._export_html
@@ -191,12 +480,43 @@ class FormBuilder(tk.Tk):
         export_btn.pack(side=tk.RIGHT, padx=12)
 
         clear_btn = tk.Button(
-            toolbar, text="🗑 Clear All", fg="#cdd6f4", bg="#f38ba8",
+            toolbar, text="🗑 Clear", fg="#cdd6f4", bg="#f38ba8",
             activebackground="#e07a96", font=("Segoe UI", 10, "bold"),
-            relief=tk.FLAT, padx=14, pady=4, cursor="hand2",
+            relief=tk.FLAT, padx=10, pady=4, cursor="hand2",
             command=self._clear_all
         )
         clear_btn.pack(side=tk.RIGHT, padx=4)
+
+        # Separator
+        tk.Frame(toolbar, bg="#45475a", width=1).pack(side=tk.RIGHT, fill=tk.Y, pady=8, padx=6)
+
+        # Open button
+        load_btn = tk.Button(
+            toolbar, text="📂 Open", fg="#cdd6f4", bg="#89b4fa",
+            activebackground="#74a8f7", font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT, padx=10, pady=4, cursor="hand2",
+            command=self._load_project
+        )
+        load_btn.pack(side=tk.RIGHT, padx=4)
+
+        # Save As button
+        save_as_btn = tk.Button(
+            toolbar, text="Save As", fg="#cdd6f4", bg="#45475a",
+            activebackground="#585b70", font=("Segoe UI", 10),
+            relief=tk.FLAT, padx=10, pady=4, cursor="hand2",
+            command=self._save_project_as
+        )
+        save_as_btn.pack(side=tk.RIGHT, padx=2)
+
+        # Save button
+        save_btn = tk.Button(
+            toolbar, text="💾 Save", fg="#1e1e2e", bg="#f9e2af",
+            activebackground="#f5d58a",
+            font=("Segoe UI", 10, "bold"),
+            relief=tk.FLAT, padx=10, pady=4, cursor="hand2",
+            command=self._save_project
+        )
+        save_btn.pack(side=tk.RIGHT, padx=2)
 
     def _build_sidebar(self, parent):
         sidebar = tk.Frame(parent, bg="#282840", width=200)
@@ -240,8 +560,6 @@ class FormBuilder(tk.Tk):
                 widget.bind("<ButtonRelease-1>", self._drag_end)
 
                 # Hover effects
-                widget.bind("<Enter>", lambda e, f=frame: f.configure(bg="#3b3b5c"))
-                widget.bind("<Leave>", lambda e, f=frame: f.configure(bg="#313150"))
                 widget.bind("<Enter>", lambda e, f=frame, il=icon_lbl, tl=text_lbl: (
                     f.configure(bg="#3b3b5c"),
                     il.configure(bg="#3b3b5c"),
@@ -317,6 +635,15 @@ class FormBuilder(tk.Tk):
             btn_frame, text="Cols", fg="#6c7086", bg="#1e1e2e",
             font=("Segoe UI", 8)
         ).pack()
+
+    # ── Theme Picker ────────────────────────────────────────────────────────
+
+    def _open_theme_picker(self):
+        dialog = ThemePickerDialog(self, self.selected_theme)
+        self.wait_window(dialog)
+        if dialog.result:
+            self.selected_theme = dialog.result
+            self.theme_btn.configure(text=f"{self.selected_theme}  ▾")
 
     # ── Drag & Drop ─────────────────────────────────────────────────────────
 
@@ -395,10 +722,19 @@ class FormBuilder(tk.Tk):
             element_id = f"{base_id}_{counter}"
             counter += 1
 
+        # Ask for options if this element type needs them
+        options = []
+        if etype in NEEDS_OPTIONS:
+            dialog = OptionsDialog(self, etype, label)
+            if dialog.result is None:
+                return  # user cancelled options dialog
+            options = dialog.result
+
         self.form_elements.append({
             "type": etype,
             "label": label,
             "id": element_id,
+            "options": options,
         })
 
         self._refresh_canvas()
@@ -518,6 +854,17 @@ class FormBuilder(tk.Tk):
             font=("Consolas", 8), anchor="w"
         ).pack(fill=tk.X, padx=10, pady=(0, 2))
 
+        # Show options if present
+        options = el.get("options", [])
+        if options:
+            opts_text = ", ".join(options[:5])
+            if len(options) > 5:
+                opts_text += f" (+{len(options) - 5} more)"
+            tk.Label(
+                card, text=f"Options: {opts_text}", fg="#a6adc8", bg=bg,
+                font=("Segoe UI", 8), anchor="w", wraplength=250
+            ).pack(fill=tk.X, padx=10, pady=(0, 2))
+
         # Mini preview of the element
         self._render_mini_preview(card, el, bg)
 
@@ -532,6 +879,7 @@ class FormBuilder(tk.Tk):
 
     def _render_mini_preview(self, parent, el, bg):
         etype = el["type"]
+        options = el.get("options", [])
         preview = tk.Frame(parent, bg=bg)
         preview.pack(fill=tk.X, padx=10, pady=2)
 
@@ -546,17 +894,36 @@ class FormBuilder(tk.Tk):
                         height=2, font=("Segoe UI", 9), state="disabled")
             t.pack(fill=tk.X)
         elif etype == "checkbox":
-            tk.Checkbutton(preview, text=el["label"], bg=bg, fg="#cdd6f4",
-                           selectcolor="#3b3b5c", activebackground=bg,
-                           font=("Segoe UI", 9)).pack(anchor="w")
+            if options:
+                for opt in options[:4]:
+                    tk.Checkbutton(preview, text=opt, bg=bg, fg="#cdd6f4",
+                                   selectcolor="#3b3b5c", activebackground=bg,
+                                   font=("Segoe UI", 9)).pack(anchor="w")
+                if len(options) > 4:
+                    tk.Label(preview, text=f"  +{len(options)-4} more...",
+                             fg="#6c7086", bg=bg, font=("Segoe UI", 8)).pack(anchor="w")
+            else:
+                tk.Checkbutton(preview, text=el["label"], bg=bg, fg="#cdd6f4",
+                               selectcolor="#3b3b5c", activebackground=bg,
+                               font=("Segoe UI", 9)).pack(anchor="w")
         elif etype == "radio":
-            tk.Radiobutton(preview, text="Option", bg=bg, fg="#cdd6f4",
-                           selectcolor="#3b3b5c", activebackground=bg,
-                           font=("Segoe UI", 9)).pack(anchor="w")
+            if options:
+                for opt in options[:4]:
+                    tk.Radiobutton(preview, text=opt, bg=bg, fg="#cdd6f4",
+                                   selectcolor="#3b3b5c", activebackground=bg,
+                                   font=("Segoe UI", 9)).pack(anchor="w")
+                if len(options) > 4:
+                    tk.Label(preview, text=f"  +{len(options)-4} more...",
+                             fg="#6c7086", bg=bg, font=("Segoe UI", 8)).pack(anchor="w")
+            else:
+                tk.Radiobutton(preview, text="Option", bg=bg, fg="#cdd6f4",
+                               selectcolor="#3b3b5c", activebackground=bg,
+                               font=("Segoe UI", 9)).pack(anchor="w")
         elif etype == "select":
-            cb = ttk.Combobox(preview, values=["Option 1", "Option 2"],
+            display_vals = options[:5] if options else ["Option 1", "Option 2"]
+            cb = ttk.Combobox(preview, values=display_vals,
                               state="disabled", width=20)
-            cb.set("Select...")
+            cb.set(display_vals[0] if display_vals else "Select...")
             cb.pack(fill=tk.X)
         elif etype == "date":
             e = tk.Entry(preview, bg="#3b3b5c", fg="#cdd6f4", relief=tk.FLAT,
@@ -603,6 +970,74 @@ class FormBuilder(tk.Tk):
             self.selected_index = None
             self._refresh_canvas()
 
+    # ── Save / Load Project ─────────────────────────────────────────────────
+
+    def _get_project_data(self):
+        return {
+            "version": 2,
+            "theme": self.selected_theme,
+            "columns": self.columns,
+            "elements": self.form_elements,
+        }
+
+    def _load_project_data(self, data):
+        self.selected_theme = data.get("theme", "Clean / Minimal")
+        self.columns = data.get("columns", 1)
+        self.form_elements = data.get("elements", [])
+        # Ensure all elements have an 'options' key (backwards compat with v1)
+        for el in self.form_elements:
+            if "options" not in el:
+                el["options"] = []
+        self.selected_index = None
+        self.col_label.config(text=str(self.columns))
+        self.theme_btn.configure(text=f"{self.selected_theme}  ▾")
+        self._refresh_canvas()
+
+    def _save_project(self):
+        if self.current_save_path:
+            self._write_project(self.current_save_path)
+        else:
+            self._save_project_as()
+
+    def _save_project_as(self):
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".formbuilder",
+            filetypes=[("Form Builder Project", "*.formbuilder"), ("JSON Files", "*.json")],
+            initialfile="my_form.formbuilder",
+            title="Save Project"
+        )
+        if not filepath:
+            return
+        self.current_save_path = filepath
+        self._write_project(filepath)
+
+    def _write_project(self, filepath):
+        try:
+            data = self._get_project_data()
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            name = os.path.basename(filepath)
+            self.title(f"HTML Form Builder — {name}")
+        except Exception as e:
+            messagebox.showerror("Save Error", f"Could not save project:\n{e}")
+
+    def _load_project(self):
+        filepath = filedialog.askopenfilename(
+            filetypes=[("Form Builder Project", "*.formbuilder"), ("JSON Files", "*.json"), ("All Files", "*.*")],
+            title="Open Project"
+        )
+        if not filepath:
+            return
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.current_save_path = filepath
+            self._load_project_data(data)
+            name = os.path.basename(filepath)
+            self.title(f"HTML Form Builder — {name}")
+        except Exception as e:
+            messagebox.showerror("Load Error", f"Could not load project:\n{e}")
+
     # ── HTML Export ──────────────────────────────────────────────────────────
 
     def _export_html(self):
@@ -610,7 +1045,7 @@ class FormBuilder(tk.Tk):
             messagebox.showwarning("Empty Form", "Add some elements first!")
             return
 
-        theme_name = self.selected_theme.get()
+        theme_name = self.selected_theme
         theme = THEMES[theme_name]
         cols = self.columns
 
@@ -736,10 +1171,11 @@ class FormBuilder(tk.Tk):
 
     .checkbox-label,
     .radio-label {{
-        display: inline-flex;
+        display: flex;
         align-items: center;
         font-weight: normal;
         cursor: pointer;
+        margin-bottom: 0.35rem;
     }}
 
     button[type="submit"] {{
@@ -777,6 +1213,7 @@ class FormBuilder(tk.Tk):
         etype = el["type"]
         label = el["label"]
         eid = el["id"]
+        options = el.get("options", [])
         indent = "            "
 
         if etype == "text":
@@ -792,7 +1229,22 @@ class FormBuilder(tk.Tk):
 {indent}</div>
 """
         elif etype == "checkbox":
-            return f"""{indent}<div class="form-group">
+            if options:
+                items = ""
+                for opt in options:
+                    opt_id = re.sub(r'[^a-zA-Z0-9]+', '_', opt.strip()).strip('_').lower()
+                    val = opt_id
+                    items += f"""{indent}    <label class="checkbox-label">
+{indent}        <input type="checkbox" id="{eid}_{opt_id}" name="{eid}" value="{val}">
+{indent}        {opt}
+{indent}    </label>
+"""
+                return f"""{indent}<div class="form-group">
+{indent}    <label>{label}</label>
+{items}{indent}</div>
+"""
+            else:
+                return f"""{indent}<div class="form-group">
 {indent}    <label class="checkbox-label">
 {indent}        <input type="checkbox" id="{eid}" name="{eid}">
 {indent}        {label}
@@ -800,7 +1252,22 @@ class FormBuilder(tk.Tk):
 {indent}</div>
 """
         elif etype == "radio":
-            return f"""{indent}<div class="form-group">
+            if options:
+                items = ""
+                for opt in options:
+                    opt_id = re.sub(r'[^a-zA-Z0-9]+', '_', opt.strip()).strip('_').lower()
+                    val = opt_id
+                    items += f"""{indent}    <label class="radio-label">
+{indent}        <input type="radio" id="{eid}_{opt_id}" name="{eid}" value="{val}">
+{indent}        {opt}
+{indent}    </label>
+"""
+                return f"""{indent}<div class="form-group">
+{indent}    <label>{label}</label>
+{items}{indent}</div>
+"""
+            else:
+                return f"""{indent}<div class="form-group">
 {indent}    <label class="radio-label">
 {indent}        <input type="radio" id="{eid}" name="{eid}" value="{eid}">
 {indent}        {label}
@@ -808,14 +1275,19 @@ class FormBuilder(tk.Tk):
 {indent}</div>
 """
         elif etype == "select":
+            opts_html = f'{indent}        <option value="" disabled selected>Select {label.lower()}...</option>\n'
+            if options:
+                for opt in options:
+                    opt_val = re.sub(r'[^a-zA-Z0-9]+', '_', opt.strip()).strip('_').lower()
+                    opts_html += f'{indent}        <option value="{opt_val}">{opt}</option>\n'
+            else:
+                opts_html += f'{indent}        <option value="option1">Option 1</option>\n'
+                opts_html += f'{indent}        <option value="option2">Option 2</option>\n'
+                opts_html += f'{indent}        <option value="option3">Option 3</option>\n'
             return f"""{indent}<div class="form-group">
 {indent}    <label for="{eid}">{label}</label>
 {indent}    <select id="{eid}" name="{eid}">
-{indent}        <option value="" disabled selected>Select {label.lower()}...</option>
-{indent}        <option value="option1">Option 1</option>
-{indent}        <option value="option2">Option 2</option>
-{indent}        <option value="option3">Option 3</option>
-{indent}    </select>
+{opts_html}{indent}    </select>
 {indent}</div>
 """
         elif etype == "date":
